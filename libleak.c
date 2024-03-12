@@ -21,7 +21,7 @@
 
 /* LEAK_EXPIRE: log if a memory block is not freed after this time.
  * You should change this according to your scenarios. */
-static time_t conf_expire = 60;
+static time_t conf_expire = 0;
 
 /* LEAK_AUTO_EXPIRE: increase 'expire' if any block is freed
  * after expired, if set. */
@@ -43,6 +43,9 @@ static char *conf_lib_blacklist = NULL;
 
 /* LEAK_AFTER: start detect after this time (in second). */
 static long conf_start_ms = 0;
+
+
+static size_t alloc_total = 0;
 
 
 /* ### hooking symbols */
@@ -563,9 +566,13 @@ static void leak_process_alloc(void *p, size_t size)
 	mb->create = time(NULL);
 	mb->callstack = cs;
 
+	alloc_total += mb->size;
+	fprintf(leak_log_filp, "alloc_total %ld + %ld %p\n", alloc_total, mb->size, mb->address);
+
 	wuy_dict_add(leak_memblock_dict, mb);
 	wuy_list_append(&leak_memblock_list, &mb->list_node);
 	pthread_mutex_unlock(&leak_memblock_mutex);
+
 
 	leak_expire();
 
@@ -597,6 +604,10 @@ static void leak_process_free(void *p)
 	struct leak_memblock tmp = *mb;
 	wuy_pool_free(mb);
 	mb = &tmp;
+
+	alloc_total -= mb->size;
+	fprintf(leak_log_filp, "alloc_total %ld - %ld %p\n", alloc_total, mb->size, mb->address);
+
 	pthread_mutex_unlock(&leak_memblock_mutex);
 
 	/* update callstack stats */
@@ -660,7 +671,15 @@ static void leak_process_update(void *p, size_t size)
 		return;
 	}
 	mb->callstack->alloc_size += size - mb->size;
+
+	size_t orig_size = mb->size;
+
 	mb->size = size;
+
+	alloc_total -= orig_size;
+	alloc_total += mb->size;
+	fprintf(leak_log_filp, "alloc_total %ld U %ld %ld %p\n", alloc_total, orig_size, mb->size, mb->address);
+
 	pthread_mutex_unlock(&leak_memblock_mutex);
 
 	leak_expire();

@@ -21,7 +21,7 @@
 
 /* LEAK_EXPIRE: log if a memory block is not freed after this time.
  * You should change this according to your scenarios. */
-static time_t conf_expire = 0;
+static time_t conf_expire = 60;
 
 /* LEAK_AUTO_EXPIRE: increase 'expire' if any block is freed
  * after expired, if set. */
